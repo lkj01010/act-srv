@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package gamepb;
+
+message Player {
+    string id = 1;
+    string name = 2;
+    int32 level = 3;
+    int32 figure = 4;
+    int32 weapon_type = 5;
+    int32 score = 6;
+
+    int32 x = 10;
+    int32 y = 11;
+    int32 life = 12;
+    int32 cur_life = 13;
+    int32 def_level = 14;
+    int32 speed_level = 15;
+}
+
+message BattleInfoNotify {
+    message PlayerInfo {
+        string id = 1;
+        int32 cur_life = 2;
+        int32 x = 3;
+        int32 y = 4;
+    }
+    repeated PlayerInfo info_list = 1;
+}
+
+message Property {
+    enum Type {
+        GEN = 0;
+        HEART = 1;
+    }
+    Type type = 1;
+    int32 x = 2;
+    int32 y = 3;
+}
+
+message Scene {
+    repeated Property property_list = 1;
+}
+
+message SceneNotify {
+    repeated Property property_inc_list = 1;
+    repeated Property property_dec_list = 2;
+}
+
+message EnterGameReq {
+    int32 room_type = 1;
+}
+
+message EnterGameAck {
+    Scene scene_info = 1;
+    Player user = 2;
+    repeated Player other_player_list = 3;
+}

@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package agent;
+
+message LoginReq {
+    string platform = 1;
+    string client_version = 2;
+    string device_name = 3;
+    string device_id = 4;
+}
