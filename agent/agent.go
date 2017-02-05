@@ -8,6 +8,7 @@ import (
 	pb "github.com/lkj01010/act-srv/pb"
 	. "github.com/lkj01010/act-srv/agent/types"
 	"github.com/lkj01010/act-srv/utils"
+	"github.com/lkj01010/goutils/log"
 )
 
 // PIPELINE #2: agent
@@ -43,6 +44,8 @@ func agent(sess *Session, in chan []byte, out *Buffer) {
 			if !ok {
 				return
 			}
+
+			log.Debugf("recieve msg: %v", msg)
 
 			sess.PacketCount++
 			sess.PacketTime = time.Now()

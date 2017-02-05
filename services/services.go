@@ -5,6 +5,7 @@ import (
 	"google.golang.org/grpc"
 	"github.com/lkj01010/act-srv/consts"
 	"github.com/lkj01010/goutils/log"
+	"time"
 )
 
 var (
@@ -14,7 +15,7 @@ var (
 
 func GetGameConn() *grpc.ClientConn {
 	once.Do(func() {
-		conn, err := grpc.Dial(consts.GamePort)
+		conn, err := grpc.Dial(consts.GamePort, grpc.WithTimeout(time.Millisecond), grpc.WithBlock(), grpc.WithInsecure())
 		if err != nil {
 			log.Fatalf("connect gamesrv err: %+v", err)
 		}

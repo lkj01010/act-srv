@@ -106,5 +106,5 @@ func P_login_req(sess *Session) []byte {
 		}
 	}
 	go fetcher_task(sess)
-	return packet.Pack(Cmd["user_login_succeed_ack"], S_user_snapshot{F_uid: sess.UserId}, nil)
+	return packet.Pack(Cmd["login_ack"], S_user_snapshot{F_uid: sess.UserId}, nil)
 }
