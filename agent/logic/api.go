@@ -5,8 +5,8 @@ import (
 )
 
 var Cmd = map[string]int16{
-	"heart_beat_req":         0, // 心跳包..
-	"heart_beat_ack":         1, // 心跳包回复
+	"heartbeat_req":         0, // 心跳包..
+	"heartbeat_ack":         1, // 心跳包回复
 	"login_req":            10, // 登陆
 	"login_ack":            11, // 登陆回执
 	"client_error_ack":       13, // 客户端错误
@@ -17,8 +17,8 @@ var Cmd = map[string]int16{
 }
 
 var RCmd = map[int16]string{
-	0:    "heart_beat_req", // 心跳包..
-	1:    "heart_beat_ack", // 心跳包回复
+	0:    "heartbeat_req", // 心跳包..
+	1:    "heartbeat_ack", // 心跳包回复
 	10:   "login_req", // 登陆
 	11:   "login_ack", // 登陆回执
 	13:   "client_error_ack", // 客户端错误

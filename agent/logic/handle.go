@@ -17,13 +17,22 @@ import (
 
 	//sp "github.com/gonet2/libs/services"
 	"github.com/lkj01010/act-srv/services"
+	"github.com/lkj01010/act-srv/agent/logic/agentpb"
+	"github.com/golang/protobuf/proto"
 )
 
 // 心跳包
-func P_heartbeat_req(sess *Session) []byte {
+func P_heartbeat_req(sess *Session) ([]byte, error) {
 	//tbl, _ := PKT_auto_id(reader)
-	//return packet.Pack(Cmd["heart_beat_ack"], tbl, nil)
-	return []byte("123")
+	payload, err := proto.Marshal(&agentpb.HeartbeatAck{
+		SeqId: sess.PacketCount,
+	})
+	if err != nil {
+		log.Errorf("marshal HeartbeatAck err=%+v", err)
+		return nil, err
+	}
+	return packet.Pack(Cmd["heartbeat_ack"], payload, nil), nil
+	//return []byte("123")
 }
 
 // 密钥交换
@@ -61,7 +70,7 @@ func P_heartbeat_req(sess *Session) []byte {
 //}
 
 // 玩家登陆过程
-func P_login_req(sess *Session) []byte {
+func P_login_req(sess *Session) ([]byte, error) {
 	// TODO: 登陆鉴权
 	// 简单鉴权可以在agent直接完成，通常公司都存在一个用户中心服务器用于鉴权
 	sess.UserId = genUserId()
@@ -106,5 +115,13 @@ func P_login_req(sess *Session) []byte {
 		}
 	}
 	go fetcher_task(sess)
-	return packet.Pack(Cmd["login_ack"], S_user_snapshot{F_uid: sess.UserId}, nil)
+
+	payload, err := proto.Marshal(&agentpb.LoginAck{UserId: sess.UserId})
+
+	return packet.Pack(
+		Cmd["login_ack"],
+		payload,
+		nil,
+	)
+	//return packet.Pack(Cmd["login_ack"], S_user_snapshot{F_uid: sess.UserId}, nil)
 }

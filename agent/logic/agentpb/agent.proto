@@ -1,6 +1,14 @@
 syntax = "proto3";
 
-package agent;
+package agentpb;
+
+message HeartbeatAck {
+    uint32 seq_id = 1;
+}
+
+message LoginAck {
+    int32 user_id = 1;
+}
 
 message LoginReq {
     string platform = 1;

@@ -72,7 +72,9 @@ func (s *server) recv(stream GameService_StreamServer, sess_die chan struct{}) c
 			}
 			select {
 			case ch <- in:
-			case <-sess_die:
+			case <-sess_die:	// 关闭的channel可以立即取出数据,应该是nil
+				// mid:
+				return
 			}
 		}
 	}()

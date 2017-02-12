@@ -16,5 +16,5 @@ func main() {
 	client, _ := client.NewClient()
 	defer client.Close()
 
-	client.Startup();
+	client.Startup()
 }
