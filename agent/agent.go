@@ -26,6 +26,7 @@ func agent(sess *Session, in chan []byte, out *Buffer) {
 
 	// cleanup work
 	defer func() {
+		log.Info("agent die")
 		close(sess.Die)
 		if sess.Stream != nil {
 			sess.Stream.CloseSend()
@@ -44,8 +45,7 @@ func agent(sess *Session, in chan []byte, out *Buffer) {
 			if !ok {
 				return
 			}
-
-			log.Debugf("recieve msg: %v", msg)
+			//log.Debugf("recieve msg: %v", msg)
 
 			sess.PacketCount++
 			sess.PacketTime = time.Now()

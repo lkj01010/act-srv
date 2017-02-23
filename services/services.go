@@ -15,7 +15,7 @@ var (
 
 func GetGameConn() *grpc.ClientConn {
 	once.Do(func() {
-		conn, err := grpc.Dial(consts.GamePort, grpc.WithTimeout(time.Millisecond), grpc.WithBlock(), grpc.WithInsecure())
+		conn, err := grpc.Dial(consts.GamePort, grpc.WithTimeout(time.Second), grpc.WithBlock(), grpc.WithInsecure())
 		if err != nil {
 			log.Fatalf("connect gamesrv err: %+v", err)
 		}

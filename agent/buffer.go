@@ -52,7 +52,8 @@ func (buf *Buffer) send(sess *Session, data []byte) {
 	// if the size of the data to return is tiny, pad with some random numbers
 	// this strategy may change to randomize padding
 	if len(data) < PADDING_LIMIT {
-		data = append(data, _padding[:]...)
+		// lkj:modify: del temperately
+		//data = append(data, _padding[:]...)
 	}
 
 	// encryption

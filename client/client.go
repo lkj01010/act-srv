@@ -2,15 +2,20 @@ package client
 
 import (
 	"net"
-	"github.com/lkj01010/goutils/log"
-
-	"github.com/lkj01010/act-srv/consts"
-	"github.com/lkj01010/act-srv/agent/logic"
 	"time"
 	"encoding/binary"
 	"io"
+	"github.com/lkj01010/goutils/log"
+
+	"github.com/lkj01010/act-srv/consts"
+	agentLogic "github.com/lkj01010/act-srv/agent/logic"
+	gameLogic "github.com/lkj01010/act-srv/game/logic"
 	"github.com/lkj01010/goutils/timer"
 	"github.com/lkj01010/act-srv/misc/packet"
+	"github.com/golang/protobuf/proto"
+	"github.com/lkj01010/act-srv/game/logic/gamepb"
+	"os"
+	"os/signal"
 )
 
 const (
@@ -42,20 +47,12 @@ func NewClient() (*Client, error) {
 	}, err
 }
 
-func (cli *Client) Send(bytes []byte) {
-	if _, err := cli.conn.Write(bytes); err != nil {
-		log.Error(err)
-	}
-	log.Debugf("send bytes: %v", bytes)
-}
-
 func (cli *Client) Close() {
 	cli.conn.Close()
 	log.Debug("agent client close")
 }
 
 func (cli *Client) Startup() {
-	log.Infof("startup p: %+v", pool);
 	conn := cli.conn
 
 	// for reading the 2-Byte header
@@ -91,7 +88,7 @@ func (cli *Client) Startup() {
 		}
 		size := binary.BigEndian.Uint16(header)
 
-		log.Debugf("read header: %+v", header)
+		//log.Debugf("read header=%+v, size=%+v", header, size)
 
 		// alloc a byte slice of the size defined in the header for reading data
 		payload := make([]byte, size)
@@ -114,10 +111,10 @@ func (cli *Client) Startup() {
 //////////////////////////////////////////////////
 
 type session struct {
-	timeStamp int32
-	in        chan []byte
-	die       chan struct{}
-	w         io.Writer
+	seqId uint32
+	in    chan []byte
+	die   chan struct{}
+	w     io.Writer
 
 	timer timer.Timer
 }
@@ -132,8 +129,8 @@ func NewSession(in chan []byte, w io.Writer) *session {
 }
 
 func (sess *session) serve() {
-	//sigCh := make(chan os.Signal, 1)
-	//signal.Notify(sigCh, syscall.SIGTERM)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, os.Kill)
 
 	ch := make(chan []byte, 1)
 
@@ -155,25 +152,26 @@ func (sess *session) serve() {
 				sess.Send(cmd, payload)
 			}
 		case <-timer.C:
-			timer.Reset(3 * time.Second)
+			timer.Reset(5 * time.Second)
 			sess.update() // game loop
-		//case sig := <-sigCh:
-		//	if sig == syscall.SIGTERM {
-		//		log.Info("agent shutdown.")
-		//		os.Exit(0)
-		//	}
+		case sig := <-sigCh:
+			if sig == os.Interrupt || sig == os.Kill {
+				log.Info("agent shutdown")
+				os.Exit(0)
+			}
 		}
 	}
 }
 
 func (sess *session) Send(cmd int16, payload []byte) error {
-	sess.timeStamp++
-	s_agent := &logic.S_agent{
-		F_timeStamp: sess.timeStamp,
-		F_proto:     cmd,
-		F_payload:   payload,
+	sess.seqId++
+	s_agent := &agentLogic.S_agent{
+		F_seqId:   sess.seqId,
+		F_proto:   cmd,
+		F_payload: payload,
 	}
 	dataByte := s_agent.Pack()
+	log.Debugf("send cmd=%+v, payload=%+v", cmd, payload)
 	if _, err := sess.w.Write(dataByte); err != nil {
 		log.Error("session send dail error=", err)
 		return err
@@ -182,9 +180,8 @@ func (sess *session) Send(cmd int16, payload []byte) error {
 }
 
 func (sess *session) proxy_msg(msg []byte) (int16, []byte) {
-	log.Debugf("proxy msg: %v", msg)
+	//log.Debugf("proxy_msg : %+v", msg)
 
-	//return []byte("123")
 	reader := packet.Reader(msg)
 	var cmd int16
 	var payload []byte
@@ -193,40 +190,26 @@ func (sess *session) proxy_msg(msg []byte) (int16, []byte) {
 	if cmd, err = reader.ReadS16(); err != nil {
 		panic(err)
 	}
-	log.Debugf("prox msg, cmd=%+v", cmd)
+	//log.Debugf("proxy msg, cmd=%+v", cmd)
 	if payload, err = reader.ReadBytes(); err != nil {
 		panic(err)
 	}
-	log.Debugf("proxy msg, payload", payload)
+	//log.Debugf("proxy msg, payload=%+v", payload)
 
 	if ret, err = handlers[cmd](sess, payload); err != nil {
 		panic(err)
 	}
 
-	log.Debugf("handle ret=%+v", ret)
+	log.Debugf("proxy_msg msg=%+v, ret=%+v", msg, ret)
 
-	data := pool.getNext()
-	return data.cmd, data.payload
+	//data := pool.getNext()
+	//return data.cmd, data.payload
+	return 0, nil
 }
 
 func (sess *session) update() {
 	data := pool.getNext()
 	sess.Send(data.cmd, data.payload)
-}
-
-func (s *session) Req_login() []byte {
-
-	s_agent := &logic.S_agent{
-		F_timeStamp: s.timeStamp,
-		F_proto:     logic.Cmd["login_req"],
-		F_payload:   nil,
-	}
-	return s_agent.Pack()
-	//log.Debugf("send: %+v", s_agent)
-}
-
-func (s *session) Req_enter_game() (b []byte) {
-	return
 }
 
 //////////////////////////////////////////////////
@@ -242,33 +225,41 @@ type cmdDataPool struct {
 
 func (p *cmdDataPool) init() {
 	p.cmdList = append(p.cmdList, cmdData{
-		cmd:     logic.Cmd["login_req"],
+		cmd:     agentLogic.Cmd["login_req"],
 		payload: nil,
 	})
 	p.cmdList = append(p.cmdList, cmdData{
-		cmd:     logic.Cmd["heart_beat_req"],
+		cmd:     agentLogic.Cmd["heartbeat_req"],
 		payload: nil,
 	})
 	p.cmdList = append(p.cmdList, cmdData{
-		cmd:     logic.Cmd["heart_beat_req"],
+		cmd:     agentLogic.Cmd["heartbeat_req"],
 		payload: nil,
 	})
-	log.Infof("p init: %+v", p);
+
+	payload, _ := proto.Marshal(&gamepb.EnterGameReq{
+		RoomType: 1,
+		Figure: 8,
+	})
+	//writer := packet.Writer()
+	//writer.WriteBytes(payload)
+	p.cmdList = append(p.cmdList, cmdData{
+		cmd:     gameLogic.Cmd["enter_game_req"],
+		//payload: writer.Data(),
+		payload: payload,
+	})
 }
 
 func (p *cmdDataPool) getNext() (data cmdData) {
-	//log.Infof("p getNext: %+v", p);
+	data = p.cmdList[p.curCmdIndex]
+	//log.Infof("getCmdIndex=%+v", p.curCmdIndex)
+
 	if p.curCmdIndex < len(p.cmdList) - 1 {
 		p.curCmdIndex++
 	} else {
 		p.curCmdIndex = 1
 	}
-	data = p.cmdList[p.curCmdIndex]
 
-	//data = cmdData{
-	//	cmd: logic.Cmd["login_req"],
-	//	payload: nil,
-	//}
 	return
 }
 

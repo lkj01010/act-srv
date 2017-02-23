@@ -4,26 +4,38 @@ import (
 	"github.com/lkj01010/act-srv/agent/logic/agentpb"
 	"github.com/lkj01010/goutils/log"
 	"github.com/golang/protobuf/proto"
+	"github.com/lkj01010/act-srv/game/logic/gamepb"
 )
 
-func H_heartbeat_ack(s *session, payload []byte) ([]byte, error) {
+func H_heartbeat_ack(sess *session, payload []byte) ([]byte, error) {
 	pb := new(agentpb.HeartbeatAck)
 	if err := proto.Unmarshal(payload, pb); err != nil {
-		log.Errorf("unmarsha HeartbeatAck err=%+v", err)
+		log.Errorf("unmarshal HeartbeatAck err=%+v", err)
 		return nil, err
 	}
-	foo := pb.GetFoo()
-	log.Infof("H_heartbeat_ack foo=%+v", foo)
+	seqId := pb.GetSeqId()
+	log.Infof("H_heartbeat_ack seqId=%+v", seqId)
 	return nil, nil
 }
 
-func H_login_ack(s *session, payload []byte) ([]byte, error) {
+func H_login_ack(sess *session, payload []byte) ([]byte, error) {
 	pb := new(agentpb.LoginAck)
 	if err := proto.Unmarshal(payload, pb); err != nil {
 		log.Errorf("unmarshal LoginAck err=%+v", err)
 		return nil, err
 	}
 	userId := pb.GetUserId()
-	log.Infof("H_heartbeat_ack userId=%+v", userId)
+	log.Infof("H_login_ack userId=%+v", userId)
+	return nil, nil
+}
+
+func H_enter_game_ack(sess *session, payload []byte) ([]byte, error) {
+	pb := new(gamepb.EnterGameAckTest)
+	if err := proto.Unmarshal(payload, pb); err != nil {
+		log.Errorf("unmarshal EnterGameAck err=%+v", err)
+		return nil, err
+	}
+	userId := pb.GetUserId()
+	log.Infof("H_enter_game_ack userId=%+v", userId)
 	return nil, nil
 }

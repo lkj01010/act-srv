@@ -3,7 +3,7 @@ syntax = "proto3";
 package gamepb;
 
 message Player {
-    string id = 1;
+    int32 id = 1;
     string name = 2;
     int32 level = 3;
     int32 figure = 4;
@@ -20,7 +20,7 @@ message Player {
 
 message BattleInfoNotify {
     message PlayerInfo {
-        string id = 1;
+        int32 id = 1;
         int32 cur_life = 2;
         int32 x = 3;
         int32 y = 4;
@@ -49,10 +49,15 @@ message SceneNotify {
 
 message EnterGameReq {
     int32 room_type = 1;
+    int32 figure = 2;
 }
 
 message EnterGameAck {
     Scene scene_info = 1;
     Player user = 2;
     repeated Player other_player_list = 3;
+}
+
+message EnterGameAckTest {
+    int32 user_id = 1;
 }

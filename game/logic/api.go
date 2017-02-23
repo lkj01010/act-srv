@@ -12,24 +12,24 @@ import (
 //}
 
 var Cmd = map[string]int16{
-	"enter_game_req": 0,
-	"enter_game_ack": 1,
-	"battle_info_notify": 2,
-	"scene_notify": 3,
+	"enter_game_req": 1001,
+	"enter_game_ack": 1002,
+	"battle_info_notify": 1003,
+	"scene_notify": 1004,
 }
 
 //var Cmd = map[string]int16{}
 var RCmd = map[int16]string{}
 
-var Handlers map[int16]func(*Session) []byte
+var Handlers map[int16]func(*Session, []byte) []byte
 
 func init() {
 	for k, v := range Cmd {
 		RCmd[v] = k
 	}
 
-	Handlers = map[int16]func(*Session) []byte{
-		0: P_enter_game_req,
+	Handlers = map[int16]func(*Session, []byte) []byte{
+		Cmd["enter_game_req"]: H_enter_game_req,
 	}
 }
 

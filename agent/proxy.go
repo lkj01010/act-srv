@@ -87,7 +87,12 @@ func proxy_user_request(sess *Session, p []byte) []byte {
 		}
 	} else {
 		if h := logic.Handlers[b]; h != nil {
-			ret = h(sess)
+			if ret, err = h(sess); err != nil {
+				log.Errorf("handle logic err=%+v", err)
+				sess.Flag |= SESS_KICKED_OUT
+				return nil
+			}
+
 		} else {
 			log.Errorf("service id:%v not bind", b)
 			sess.Flag |= SESS_KICKED_OUT

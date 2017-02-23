@@ -1,5 +1,7 @@
 package types
 
+import "github.com/lkj01010/act-srv/game/logic/gamelogic"
+
 const (
 	SESS_KICKED_OUT = 0x1 // 踢掉
 )
@@ -10,4 +12,6 @@ const (
 type Session struct {
 	Flag   int32 // 会话标记
 	UserId int32
+
+	Player *gamelogic.Player
 }

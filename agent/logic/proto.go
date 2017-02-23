@@ -166,19 +166,25 @@ func checkErr(err error) {
 
 // 客户端发给agent的消息
 type S_agent struct {
-	F_timeStamp int32
-	F_proto     int16
-	F_payload   []byte
+	F_seqId   uint32
+	F_proto   int16
+	F_payload []byte
 }
 
 func (p S_agent)Pack() []byte {
 	writer := packet.Writer()
-	size := (int16)(4 + 2 + len(p.F_payload))
-	writer.WriteS16(size);
-	writer.WriteS32(p.F_timeStamp);
-	writer.WriteS16(p.F_proto);
+	//size := (int16)(4 + 2 + 2 + len(p.F_payload))
+	var size uint16
 	if len(p.F_payload) > 0 {
-		writer.WriteBytes(p.F_payload);
+		size = (uint16)(4 + 2 + 2 + len(p.F_payload))
+	} else {
+		size = (uint16)(4 + 2)
+	}
+	writer.WriteU16(size)
+	writer.WriteU32(p.F_seqId)
+	writer.WriteS16(p.F_proto)
+	if len(p.F_payload) > 0 {
+		writer.WriteBytes(p.F_payload)
 	}
 	return writer.Data()
 }

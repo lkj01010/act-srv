@@ -22,16 +22,16 @@ import (
 )
 
 // 心跳包
-func P_heartbeat_req(sess *Session) ([]byte, error) {
+func H_heartbeat_req(sess *Session) ([]byte, error) {
 	//tbl, _ := PKT_auto_id(reader)
-	payload, err := proto.Marshal(&agentpb.HeartbeatAck{
+	ret, err := proto.Marshal(&agentpb.HeartbeatAck{
 		SeqId: sess.PacketCount,
 	})
 	if err != nil {
 		log.Errorf("marshal HeartbeatAck err=%+v", err)
-		return nil, err
+		return nil, nil
 	}
-	return packet.Pack(Cmd["heartbeat_ack"], payload, nil), nil
+	return packet.Pack(Cmd["heartbeat_ack"], ret, nil), nil
 	//return []byte("123")
 }
 
@@ -70,7 +70,7 @@ func P_heartbeat_req(sess *Session) ([]byte, error) {
 //}
 
 // 玩家登陆过程
-func P_login_req(sess *Session) ([]byte, error) {
+func H_login_req(sess *Session) ([]byte, error) {
 	// TODO: 登陆鉴权
 	// 简单鉴权可以在agent直接完成，通常公司都存在一个用户中心服务器用于鉴权
 	sess.UserId = genUserId()
@@ -92,7 +92,7 @@ func P_login_req(sess *Session) ([]byte, error) {
 	stream, err := cli.Stream(ctx)
 	if err != nil {
 		log.Error(err)
-		return nil
+		return nil, err
 	}
 	sess.Stream = stream
 
@@ -116,12 +116,12 @@ func P_login_req(sess *Session) ([]byte, error) {
 	}
 	go fetcher_task(sess)
 
-	payload, err := proto.Marshal(&agentpb.LoginAck{UserId: sess.UserId})
+	if ret, err := proto.Marshal(&agentpb.LoginAck{UserId: sess.UserId}); err != nil {
+		log.Error(err)
+		return nil, nil
+	} else {
+		return packet.Pack(Cmd["login_ack"], ret, nil), nil
+	}
 
-	return packet.Pack(
-		Cmd["login_ack"],
-		payload,
-		nil,
-	)
 	//return packet.Pack(Cmd["login_ack"], S_user_snapshot{F_uid: sess.UserId}, nil)
 }
