@@ -3,7 +3,7 @@ syntax = "proto3";
 package agentpb;
 
 message HeartbeatAck {
-    int32 seq_id = 1;
+    uint32 seq_id = 1;
 }
 
 message LoginAck {

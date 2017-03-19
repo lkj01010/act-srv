@@ -8,6 +8,7 @@ import (
 
 import (
 	"github.com/lkj01010/act-srv/pb"
+	. "github.com/lkj01010/act-srv/agent/consts"
 )
 
 const (
@@ -18,14 +19,14 @@ const (
 )
 
 type Session struct {
-	IP      net.IP
-	MQ      chan pb.Game_Frame          // 返回给客户端的异步消息
-	Encoder *rc4.Cipher                 // 加密器
-	Decoder *rc4.Cipher                 // 解密器
-	UserId  int32                       // 玩家ID
-	GSID    string                      // 游戏服ID;e.g.: game1,game2
-	Stream  pb.GameService_StreamClient // 后端游戏服数据流
-	Die     chan struct{}               // 会话关闭信号
+	IP       net.IP
+	StreamCh chan pb.Game_Frame          // 返回给客户端的异步消息
+	Encoder  *rc4.Cipher                 // 加密器
+	Decoder  *rc4.Cipher                 // 解密器
+	UserId   int32                       // 玩家ID
+	GSID     string                      // 游戏服ID;e.g.: game1,game2
+	Stream   pb.GameService_StreamClient // 后端游戏服数据流
+	Die      chan struct{}               // 会话关闭信号
 
 	// 会话标记
 	Flag int32
@@ -37,4 +38,11 @@ type Session struct {
 
 	// RPS控制
 	PacketCount uint32 // 对收到的包进行计数，避免恶意发包
+}
+
+func NewSession() *Session {
+	return &Session{
+		StreamCh: make(chan pb.Game_Frame, DEFAULT_MQ_SIZE),
+		Die: make(chan struct{}),
+	}
 }

@@ -13,6 +13,7 @@ import (
 
 	. "github.com/lkj01010/act-srv/agent/types"
 	"github.com/lkj01010/act-srv/utils"
+	. "github.com/lkj01010/act-srv/agent/consts"
 	"github.com/lkj01010/act-srv/consts"
 )
 
@@ -42,7 +43,7 @@ func Startup() {
 }
 
 func tcpServer() {
-	// resolve address & start listening
+	// resolve address & serve listening
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", consts.AgentPort)
 	checkError(err)
 
@@ -62,12 +63,12 @@ func tcpServer() {
 		conn.SetReadBuffer(SO_RCVBUF)
 		// set socket write buffer
 		conn.SetWriteBuffer(SO_SNDBUF)
-		// start a goroutine for every incoming connection for reading
+		// serve a goroutine for every incoming connection for reading
 		go handleClient(conn)
 
 		// check server close signal
 		select {
-		case <-die:
+		case <-srvDie:
 			listener.Close()
 			return
 		default:
@@ -94,7 +95,7 @@ func tcpServer() {
 //		conn.SetKeepAlive(0) // require application ping
 //		conn.SetStreamMode(true)
 //
-//		// start a goroutine for every incoming connection for reading
+//		// serve a goroutine for every incoming connection for reading
 //		go handleClient(conn)
 //	}
 //}
@@ -109,79 +110,63 @@ func handleClient(conn net.Conn) {
 	// for reading the 2-Byte header
 	header := make([]byte, 2)
 	// the input channel for agent()
-	in := make(chan []byte)
-	defer func() {
-		close(in) // session will close
-	}()
+	recvCh := make(chan []byte)
 
 	// create a new session object for the connection
 	// and record it's IP address
-	var sess Session
+	ss := NewSession()
+
+	defer func() {
+		close(recvCh) // session will close
+	}()
+
 	host, port, err := net.SplitHostPort(conn.RemoteAddr().String())
 	if err != nil {
 		log.Error("cannot get remote address:", err)
 		return
 	}
-	sess.IP = net.ParseIP(host)
+	ss.IP = net.ParseIP(host)
 	log.Infof("new connection from:%v port:%v", host, port)
 
-	// session die signal, will be triggered by agent()
-	sess.Die = make(chan struct{})
-
-	//// userId
-	//userIdAcc++
-	//sess.UserId = userIdAcc
-	//
-	//// game rpc
-	//cli := pb.NewGameServiceClient(gameConn)
-	//ctx := metadata.NewContext(context.Background(), metadata.New(map[string]string{"userid": fmt.Sprint(sess.UserId)}))
-	//stream, err := cli.Stream(ctx)
-	//if err != nil {
-	//	log.Error(err)
-	//	return nil
-	//}
-	//sess.Stream = stream
-
 	// create a write buffer
-	out := new_buffer(conn, sess.Die)
-	go out.start()
+	sender := new_buffer(conn, ss.Die)
+	go sender.serve()
 
-	// start agent for PACKET processing
+	// serve agent for PACKET processing
 	wg.Add(1)
-	go agent(&sess, in, out)
+	go agent(ss, recvCh, sender)
 
 	// read loop
 	for {
 		// solve dead link problem:
-		// physical disconnection without any communcation between client and server
+		// physical disconnection without any communication between client and server
 		// will cause the read to block FOREVER, so a timeout is a rescue.
 		conn.SetReadDeadline(time.Now().Add(TCP_READ_DEADLINE * time.Second))
 
 		// read 2B header
 		n, err := io.ReadFull(conn, header)
 		if err != nil {
-			log.Warningf("read header failed, ip:%v reason:%v size:%v", sess.IP, err, n)
+			log.Warningf("[agent read header failed][ip=%v][reason=%v][size=%v]", ss.IP, err, n)
 			return
 		}
 		size := binary.BigEndian.Uint16(header)
 
-		log.Debugf("read header: %+v", header)
+		//log.Debugf("read header: %+v", header)
 
-		// alloc a byte slice of the size defined in the header for reading data
+		// alloc a byte slice of the size defined recvCh the header for reading data
 		payload := make([]byte, size)
 		n, err = io.ReadFull(conn, payload)
 		if err != nil {
-			log.Warningf("read payload failed, ip:%v reason:%v size:%v", sess.IP, err, n)
+			log.Warningf("read payload failed, ip:%v reason:%v size:%v", ss.IP, err, n)
 			return
 		}
 
-		log.Debugf("read payload: %+v", payload)
+		//log.Debugf("read payload: %+v", payload)
 
-		// deliver the data to the input queue of agent()
 		select {
-		case in <- payload: // payload queued
-		case <-sess.Die:
-			log.Warningf("connection closed by logic, flag:%v ip:%v", sess.Flag, sess.IP)
+		case recvCh <- payload: // payload queued
+		case <-ss.Die:
+			log.Warningf("connection closed by logic, flag:%v ip:%v", ss.Flag, ss.IP)
 			return
 		}
 	}

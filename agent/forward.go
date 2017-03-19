@@ -28,7 +28,7 @@ func forward(sess *Session, p []byte) error {
 	}
 
 	// forward the frame to game
-	log.Infof("forward send=%+v", frame)
+	//log.Infof("forward send=%+v", frame)
 	if err := sess.Stream.Send(frame); err != nil {
 		log.Error(err)
 		return err

@@ -8,29 +8,19 @@ import (
 	"github.com/lkj01010/goutils/log"
 
 	"github.com/lkj01010/act-srv/consts"
+	. "github.com/lkj01010/act-srv/com"
 	agentLogic "github.com/lkj01010/act-srv/agent/logic"
-	gameLogic "github.com/lkj01010/act-srv/game/logic"
 	"github.com/lkj01010/goutils/timer"
 	"github.com/lkj01010/act-srv/misc/packet"
 	"github.com/golang/protobuf/proto"
-	"github.com/lkj01010/act-srv/game/logic/gamepb"
-	"os"
-	"os/signal"
+	"github.com/lkj01010/act-srv/game/core/gamepb"
+	"sync"
 )
 
 const (
 	READ_DEADLINE = 120
+	MSG_SEND_INTERVAL = 1
 )
-
-var pool cmdDataPool
-
-func init() {
-	pool = cmdDataPool{
-		cmdList:     make([]cmdData, 0),
-		curCmdIndex: 0,
-	}
-	pool.init()
-}
 
 type Client struct {
 	conn net.Conn
@@ -42,9 +32,10 @@ func NewClient() (*Client, error) {
 	if err != nil {
 		log.Error("client dail error=", err)
 	}
-	return &Client{
+	cli := &Client{
 		conn: c,
-	}, err
+	}
+	return cli, nil
 }
 
 func (cli *Client) Close() {
@@ -52,7 +43,7 @@ func (cli *Client) Close() {
 	log.Debug("agent client close")
 }
 
-func (cli *Client) Startup() {
+func (cli *Client) Startup(wg *sync.WaitGroup) {
 	conn := cli.conn
 
 	// for reading the 2-Byte header
@@ -62,6 +53,7 @@ func (cli *Client) Startup() {
 	in := make(chan []byte)
 	defer func() {
 		close(in) // session will close
+		wg.Done()
 	}()
 
 	host, port, err := net.SplitHostPort(conn.RemoteAddr().String())
@@ -117,69 +109,76 @@ type session struct {
 	w     io.Writer
 
 	timer timer.Timer
+	msgPool msgPool
 }
 
 func NewSession(in chan []byte, w io.Writer) *session {
-	return &session{
+	ss := &session{
 		in:    in,
 		w:     w,
 		die:   make(chan struct{}),
 		timer: timer.NewTimer(),
+		msgPool: msgPool{
+			cmdList:     make([]cmdData, 0),
+			curCmdIndex: 0,
+		},
 	}
+	ss.msgPool.init()
+	return ss
 }
 
-func (sess *session) serve() {
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, os.Kill)
+func (ss *session) serve() {
+	//sigCh := make(chan os.Signal, 1)
+	//signal.Notify(sigCh, os.Interrupt, os.Kill)
 
 	ch := make(chan []byte, 1)
 
 	defer func() {
 		close(ch)
-		close(sess.die)
+		close(ss.die)
 	}()
 
 	timer := time.NewTimer(0)
 	for {
 		select {
-		case msg, ok := <-sess.in:
+		case msg, ok := <-ss.in:
 			if !ok {
 				return
 			}
 
-			if cmd, payload := sess.proxy_msg(msg); cmd > 0 {
-				//sess.Send(result)
-				sess.Send(cmd, payload)
+			if cmd, payload := ss.proxy_msg(msg); cmd > 0 {
+				//ss.Send(result)
+				ss.Send(cmd, payload)
 			}
 		case <-timer.C:
-			timer.Reset(5 * time.Second)
-			sess.update() // game loop
-		case sig := <-sigCh:
-			if sig == os.Interrupt || sig == os.Kill {
-				log.Info("agent shutdown")
-				os.Exit(0)
-			}
+			timer.Reset(MSG_SEND_INTERVAL * time.Second)
+			ss.update() // game loop
+		//case sig := <-sigCh:
+		//	if sig == os.Interrupt || sig == os.Kill {
+		//		log.Info("agent shutdown")
+		//		//os.Exit(0)
+		//	}
 		}
 	}
 }
 
-func (sess *session) Send(cmd int16, payload []byte) error {
-	sess.seqId++
+func (ss *session) Send(cmd int16, payload []byte) error {
+	ss.seqId++
 	s_agent := &agentLogic.S_agent{
-		F_seqId:   sess.seqId,
+		F_seqId:   ss.seqId,
 		F_proto:   cmd,
 		F_payload: payload,
 	}
 	dataByte := s_agent.Pack()
-	log.Debugf("send cmd=%+v, payload=%+v", cmd, payload)
-	if _, err := sess.w.Write(dataByte); err != nil {
+	log.Debugf("[send][cmd=%+v][payload=%+v]", RCmd[cmd], payload)
+	if _, err := ss.w.Write(dataByte); err != nil {
 		log.Error("session send dail error=", err)
 		return err
 	}
 	return nil
 }
 
-func (sess *session) proxy_msg(msg []byte) (int16, []byte) {
+func (ss *session) proxy_msg(msg []byte) (int16, []byte) {
 	//log.Debugf("proxy_msg : %+v", msg)
 
 	reader := packet.Reader(msg)
@@ -190,26 +189,27 @@ func (sess *session) proxy_msg(msg []byte) (int16, []byte) {
 	if cmd, err = reader.ReadS16(); err != nil {
 		panic(err)
 	}
-	//log.Debugf("proxy msg, cmd=%+v", cmd)
 	if payload, err = reader.ReadBytes(); err != nil {
 		panic(err)
 	}
-	//log.Debugf("proxy msg, payload=%+v", payload)
+	log.Debugf("[receive][cmd=%+v][payload=%+v]", RCmd[cmd], payload)
 
-	if ret, err = handlers[cmd](sess, payload); err != nil {
+	if ret, err = handlers[cmd](ss, payload); err != nil {
 		panic(err)
 	}
 
-	log.Debugf("proxy_msg msg=%+v, ret=%+v", msg, ret)
+	log.Debugf("[handle ret=%+v]", ret)
 
-	//data := pool.getNext()
+	//data := pool.getCurCmdData()
 	//return data.cmd, data.payload
 	return 0, nil
 }
 
-func (sess *session) update() {
-	data := pool.getNext()
-	sess.Send(data.cmd, data.payload)
+func (ss *session) update() {
+	data := ss.msgPool.getCurCmdData()
+	if data != nil {
+		ss.Send(data.cmd, data.payload)
+	}
 }
 
 //////////////////////////////////////////////////
@@ -218,48 +218,45 @@ type cmdData struct {
 	payload []byte
 }
 
-type cmdDataPool struct {
+type msgPool struct {
 	cmdList     []cmdData
 	curCmdIndex int
 }
 
-func (p *cmdDataPool) init() {
+func (p *msgPool) init() {
 	p.cmdList = append(p.cmdList, cmdData{
-		cmd:     agentLogic.Cmd["login_req"],
+		cmd:     Cmd[Agent_LoginReq],
 		payload: nil,
 	})
 	p.cmdList = append(p.cmdList, cmdData{
-		cmd:     agentLogic.Cmd["heartbeat_req"],
+		cmd:     Cmd[Agent_HeartbeatReq],
 		payload: nil,
 	})
-	p.cmdList = append(p.cmdList, cmdData{
-		cmd:     agentLogic.Cmd["heartbeat_req"],
-		payload: nil,
-	})
+	//p.cmdList = append(p.cmdList, cmdData{
+	//	cmd:     agentLogic.Cmd[agentLogic.HeartbeatReq],
+	//	payload: nil,
+	//})
 
 	payload, _ := proto.Marshal(&gamepb.EnterGameReq{
 		RoomType: 1,
-		Figure: 8,
+		Figure:   8,
 	})
 	//writer := packet.Writer()
 	//writer.WriteBytes(payload)
 	p.cmdList = append(p.cmdList, cmdData{
-		cmd:     gameLogic.Cmd["enter_game_req"],
+		cmd: Cmd[Game_EnterGameReq],
 		//payload: writer.Data(),
 		payload: payload,
 	})
 }
 
-func (p *cmdDataPool) getNext() (data cmdData) {
-	data = p.cmdList[p.curCmdIndex]
-	//log.Infof("getCmdIndex=%+v", p.curCmdIndex)
-
-	if p.curCmdIndex < len(p.cmdList) - 1 {
-		p.curCmdIndex++
+func (p *msgPool) getCurCmdData() (data *cmdData) {
+	if p.curCmdIndex < len(p.cmdList) {
+		data = &p.cmdList[p.curCmdIndex]
 	} else {
-		p.curCmdIndex = 1
+		data = nil
 	}
-
+	p.curCmdIndex++
 	return
 }
 

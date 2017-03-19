@@ -1,8 +1,9 @@
-package agent
+package consts
 
 const (
 	// 网络拥塞控制和削峰
-	TCP_READ_DEADLINE = 120   // 秒(没有网络包进入的最大间隔)
+	//TCP_READ_DEADLINE = 120   // 秒(没有网络包进入的最大间隔)
+	TCP_READ_DEADLINE = 10   // 秒(没有网络包进入的最大间隔)
 	SO_RCVBUF         = 32767 // 每个连接的接收缓冲区
 	SO_SNDBUF         = 65535 // 每个连接的发送缓冲区
 )

@@ -10,20 +10,18 @@ import (
 	"github.com/lkj01010/goutils/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-
 	. "github.com/lkj01010/act-srv/consts"
-	. "github.com/lkj01010/act-srv/game/logic"
-	"github.com/lkj01010/act-srv/game/registry"
-	. "github.com/lkj01010/act-srv/game/types"
 	"github.com/lkj01010/act-srv/misc/packet"
 	. "github.com/lkj01010/act-srv/pb"
 	"github.com/lkj01010/act-srv/services"
 	. "github.com/lkj01010/act-srv/utils"
+	. "github.com/lkj01010/act-srv/game/com"
+	"github.com/lkj01010/act-srv/game/core"
 )
 
 var (
-	ERROR_INCORRECT_FRAME_TYPE = errors.New("incorrect frame type")
-	ERROR_SERVICE_NOT_BIND     = errors.New("service not bind")
+	errIncorrectFrameType  = errors.New("incorrect frame type")
+	ERROR_SERVICE_NOT_BIND = errors.New("service not bind")
 )
 
 func Startup() {
@@ -52,7 +50,7 @@ type server struct{}
 
 // PIPELINE #1 stream receiver
 // this function is to make the stream receiving SELECTABLE
-func (s *server) recv(stream GameService_StreamServer, sess_die chan struct{}) <-chan *Game_Frame {
+func (s *server) recv(stream GameService_StreamServer, ssDie chan struct{}) <-chan *Game_Frame {
 	ch := make(chan *Game_Frame, 1)
 	go func() {
 		defer func() {
@@ -65,14 +63,14 @@ func (s *server) recv(stream GameService_StreamServer, sess_die chan struct{}) <
 				return
 			}
 
-			log.Infof("Recv in=%+v, err=%+v", in, err)
+			//log.Infof("Recv in=%+v, err=%+v", in, err)
 			if err != nil {
 				log.Error(err)
 				return
 			}
 			select {
 			case ch <- in:
-			case <-sess_die: // 关闭的channel可以立即取出数据,应该是nil
+			case <-ssDie: // 关闭的channel可以立即取出数据,应该是nil
 				// mid:
 				return
 			}
@@ -86,51 +84,53 @@ func (s *server) recv(stream GameService_StreamServer, sess_die chan struct{}) <
 func (s *server) Stream(stream GameService_StreamServer) error {
 	defer PrintPanicStack()
 	// session init
-	var sess Session
-	sess_die := make(chan struct{})
-	ch_agent := s.recv(stream, sess_die)
-	ch_ipc := make(chan *Game_Frame, DEFAULT_CH_IPC_SIZE)
+	ss := NewSession()
+
+	ssDie := make(chan struct{})
+	streamCh := s.recv(stream, ssDie)
 
 	defer func() {
-		registry.Unregister(sess.UserId)
-		close(sess_die)
-		log.Debug("stream end:", sess.UserId)
+		Ipc.Unregister(ss.UserId)
+		close(ssDie)
+		log.Debugf("[stream end][userid=%+v]", ss.UserId)
 	}()
 
 	// read metadata from context
 	md, ok := metadata.FromContext(stream.Context())
 	if !ok {
 		log.Error("cannot read metadata from context")
-		return ERROR_INCORRECT_FRAME_TYPE
+		return errIncorrectFrameType
 	}
 	// read key
 	if len(md["userid"]) == 0 {
 		log.Error("cannot read key:userid from metadata")
-		return ERROR_INCORRECT_FRAME_TYPE
+		return errIncorrectFrameType
 	}
 	// parse userid
-	userid, err := strconv.Atoi(md["userid"][0])
+	userId, err := strconv.Atoi(md["userid"][0])
 	if err != nil {
 		log.Error(err)
-		return ERROR_INCORRECT_FRAME_TYPE
+		return errIncorrectFrameType
 	}
 
 	// register user
-	sess.UserId = int32(userid)
-	registry.Register(sess.UserId, ch_ipc)
-	log.Debug("userid", sess.UserId, "logged in")
+	ss.UserId = int32(userId)
+	Ipc.Register(ss.UserId, ss.ToAgentCh)
+	log.Debugf("[stream open][userId=%+v]", ss.UserId)
 
 	// >> main message loop <<
 	for {
 		select {
-		case frame, ok := <-ch_agent:
+		case frame, ok := <-streamCh:
 			// frames from agent
 			if !ok {
 				// EOF
+				ss.Flag |= SessKickedOut
+				log.Debug("streamCh is closed")
 				return nil
 			}
 			switch frame.Type {
-			case Game_Message: // the passthrough message from client->agent->game
+			case Game_Message:
 				// locate handler by proto number
 				reader := packet.Reader(frame.Message)
 				c, err := reader.ReadS16()
@@ -138,39 +138,16 @@ func (s *server) Stream(stream GameService_StreamServer) error {
 					log.Error(err)
 					return err
 				}
-				handle := Handlers[c]
-				if handle == nil {
-					log.Error("service not bind:", c)
-					return ERROR_SERVICE_NOT_BIND
 
-				}
-
-				// handle request
-				//ret := handle(&sess, reader)
 				payload, err := reader.ReadBytes()
 				if err != nil {
 					log.Error(err)
 					return err
 				}
-				ret := handle(&sess, payload)
 
-				// construct frame & return message from logic
-				if ret != nil {
-					if err := stream.Send(&Game_Frame{Type: Game_Message, Message: ret}); err != nil {
-						log.Error(err)
-						return err
-					}
-				}
+				log.Debugf("[dispatch][cmd=%v][payload=%+v]", c, payload)
+				core.Dispatch(ss, c, payload)
 
-				// session control by logic
-				if sess.Flag&SESS_KICKED_OUT != 0 {
-					// logic kick out
-					if err := stream.Send(&Game_Frame{Type: Game_Kick}); err != nil {
-						log.Error(err)
-						return err
-					}
-					return nil
-				}
 			case Game_Ping:
 				if err := stream.Send(&Game_Frame{Type: Game_Ping, Message: frame.Message}); err != nil {
 					log.Error(err)
@@ -178,15 +155,21 @@ func (s *server) Stream(stream GameService_StreamServer) error {
 				}
 				log.Debug("pinged")
 			default:
-				log.Error("incorrect frame type:", frame.Type)
-				return ERROR_INCORRECT_FRAME_TYPE
+				log.Errorf("[incorrect frame type=%+v]", frame.Type)
+				return errIncorrectFrameType
 			}
-		case frame := <-ch_ipc:
-			// forward async messages from interprocess(goroutines) communication
-			if err := stream.Send(frame); err != nil {
+
+		case msg := <-ss.ToAgentCh:
+			if err := stream.Send(&Game_Frame{Type: Game_Message, Message: msg}); err != nil {
 				log.Error(err)
 				return err
 			}
+		case <-ss.Die:
+			if err := stream.Send(&Game_Frame{Type: Game_Kick}); err != nil {
+				log.Error(err)
+				return err
+			}
+			return nil
 		}
 	}
 }

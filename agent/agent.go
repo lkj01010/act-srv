@@ -13,23 +13,22 @@ import (
 
 // PIPELINE #2: agent
 // all the packets from handleClient() will be handled
-func agent(sess *Session, in chan []byte, out *Buffer) {
+func agent(ss *Session, recvCh chan []byte, sender *Buffer) {
 	defer wg.Done() // will decrease waitgroup by one, useful for manual server shutdown
 	defer utils.PrintPanicStack()
 
 	// init session
-	sess.MQ = make(chan pb.Game_Frame, DEFAULT_MQ_SIZE)
-	sess.ConnectTime = time.Now()
-	sess.LastPacketTime = time.Now()
+	ss.ConnectTime = time.Now()
+	ss.LastPacketTime = time.Now()
 	// minute timer
 	min_timer := time.After(time.Minute)
 
 	// cleanup work
 	defer func() {
-		log.Info("agent die")
-		close(sess.Die)
-		if sess.Stream != nil {
-			sess.Stream.CloseSend()
+		log.Info("agent srvDie")
+		close(ss.Die)
+		if ss.Stream != nil {
+			ss.Stream.CloseSend()
 		}
 	}()
 
@@ -41,35 +40,35 @@ func agent(sess *Session, in chan []byte, out *Buffer) {
 	//  4. server shutdown signal
 	for {
 		select {
-		case msg, ok := <-in: // packet from network
+		case msg, ok := <-recvCh: // packet from network
 			if !ok {
 				return
 			}
 			//log.Debugf("recieve msg: %v", msg)
 
-			sess.PacketCount++
-			sess.PacketTime = time.Now()
+			ss.PacketCount++
+			ss.PacketTime = time.Now()
 
-			if result := proxy_user_request(sess, msg); result != nil {
-				out.send(sess, result)
+			if result := proxy_user_request(ss, msg); result != nil {
+				sender.send(ss, result)
 			}
-			sess.LastPacketTime = sess.PacketTime
-		case frame := <-sess.MQ: // packets from game
+			ss.LastPacketTime = ss.PacketTime
+		case frame := <-ss.StreamCh: // packets from game
 			switch frame.Type {
 			case pb.Game_Message:
-				out.send(sess, frame.Message)
+				sender.send(ss, frame.Message)
 			case pb.Game_Kick:
-				sess.Flag |= SESS_KICKED_OUT
+				ss.Flag |= SESS_KICKED_OUT
 			}
 		case <-min_timer: // minutes timer
-			timer_work(sess, out)
+			timer_work(ss, sender)
 			min_timer = time.After(time.Minute)
-		case <-die: // server is shuting down...
-			sess.Flag |= SESS_KICKED_OUT
+		case <-srvDie:
+			ss.Flag |= SESS_KICKED_OUT
 		}
 
-		// see if the player should be kicked out.
-		if sess.Flag&SESS_KICKED_OUT != 0 {
+		// see if the player should be kicked sender.
+		if ss.Flag&SESS_KICKED_OUT != 0 {
 			return
 		}
 	}

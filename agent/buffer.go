@@ -11,6 +11,7 @@ import (
 import (
 	"github.com/lkj01010/act-srv/misc/packet"
 	. "github.com/lkj01010/act-srv/agent/types"
+	. "github.com/lkj01010/act-srv/agent/consts"
 	"github.com/lkj01010/act-srv/utils"
 )
 
@@ -35,7 +36,7 @@ func init() {
 			for k := range _padding {
 				_padding[k] = byte(<-utils.LCG)
 			}
-			log.Info("Padding Updated:", _padding)
+			//log.Info("Padding Updated:", _padding)
 			<-time.After(PADDING_UPDATE_PERIOD * time.Second)
 		}
 	}()
@@ -71,7 +72,7 @@ func (buf *Buffer) send(sess *Session, data []byte) {
 }
 
 // packet sending goroutine
-func (buf *Buffer) start() {
+func (buf *Buffer) serve() {
 	defer utils.PrintPanicStack()
 	for {
 		select {

@@ -13,7 +13,9 @@ import (
 	"github.com/lkj01010/act-srv/agent/logic"
 	"github.com/lkj01010/act-srv/misc/packet"
 	. "github.com/lkj01010/act-srv/agent/types"
+	. "github.com/lkj01010/act-srv/com"
 	"github.com/lkj01010/act-srv/utils"
+	"github.com/lkj01010/act-srv/com"
 )
 
 const (
@@ -69,7 +71,7 @@ func proxy_user_request(sess *Session, p []byte) []byte {
 	}
 
 	// 读协议号
-	b, err := reader.ReadS16()
+	cmd, err := reader.ReadS16()
 	if err != nil {
 		log.Error("read protocol number failed.")
 		sess.Flag |= SESS_KICKED_OUT
@@ -79,14 +81,16 @@ func proxy_user_request(sess *Session, p []byte) []byte {
 	// 根据协议号断做服务划分
 	// 协议号的划分采用分割协议区间, 用户可以自定义多个区间，用于转发到不同的后端服务
 	var ret []byte
-	if b > MAX_PROTO_NUM {
+	if cmd > Cmd[Game_Start] {
+		log.Debugf("[forward send=%+v]", p[4:])
 		if err := forward(sess, p[4:]); err != nil {
-			log.Errorf("service id:%v execute failed, error:%v", b, err)
+			log.Errorf("service id:%v execute failed, error:%v", cmd, err)
 			sess.Flag |= SESS_KICKED_OUT
 			return nil
 		}
 	} else {
-		if h := logic.Handlers[b]; h != nil {
+		log.Debugf("[agent handle][cmd=%+v]", com.RCmd[cmd])
+		if h := logic.Handlers[cmd]; h != nil {
 			if ret, err = h(sess); err != nil {
 				log.Errorf("handle logic err=%+v", err)
 				sess.Flag |= SESS_KICKED_OUT
@@ -94,7 +98,7 @@ func proxy_user_request(sess *Session, p []byte) []byte {
 			}
 
 		} else {
-			log.Errorf("service id:%v not bind", b)
+			log.Errorf("service id:%v not bind", cmd)
 			sess.Flag |= SESS_KICKED_OUT
 			return nil
 		}
@@ -104,9 +108,9 @@ func proxy_user_request(sess *Session, p []byte) []byte {
 	// 监控数值会发送到statsd,格式为:
 	// API.XXX_REQ = 10ms
 	elasped := time.Now().Sub(start)
-	if b != 0 { // 排除心跳包日志
-		log.Debug("[REQ]", logic.RCmd[b])
-		_statter.Timing(1.0, fmt.Sprintf("%v%v", STATSD_PREFIX, logic.RCmd[b]), elasped)
+	if cmd != 0 { // 排除心跳包日志
+		//log.Debug("[REQ]", logic.RCmd[cmd])
+		_statter.Timing(1.0, fmt.Sprintf("%v%v", STATSD_PREFIX, com.RCmd[cmd]), elasped)
 	}
 	return ret
 }

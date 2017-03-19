@@ -14,10 +14,10 @@ var (
 )
 
 func init() {
-	_default_registry.init()
+	_default_registry.Init()
 }
 
-func (r *Registry) init() {
+func (r *Registry) Init() {
 	r.records = make(map[int32]interface{})
 }
 

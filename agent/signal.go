@@ -16,7 +16,7 @@ import (
 var (
 	wg sync.WaitGroup
 	// server close signal
-	die = make(chan struct{})
+	srvDie = make(chan struct{})
 )
 
 // handle unix signals
@@ -29,7 +29,7 @@ func sig_handler() {
 		msg := <-ch
 		switch msg {
 		case syscall.SIGTERM: // 关闭agent
-			close(die)
+			close(srvDie)
 			log.Info("sigterm received")
 			log.Info("waiting for agents close, please wait...")
 			wg.Wait()

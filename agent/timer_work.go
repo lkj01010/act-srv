@@ -8,6 +8,7 @@ import (
 
 import (
 	. "github.com/lkj01010/act-srv/agent/types"
+	. "github.com/lkj01010/act-srv/agent/consts"
 )
 
 // 玩家1分钟定时器

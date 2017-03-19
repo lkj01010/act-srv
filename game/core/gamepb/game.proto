@@ -58,6 +58,10 @@ message EnterGameAck {
     repeated Player other_player_list = 3;
 }
 
-message EnterGameAckTest {
+message EnterGameNtf {
+    int32 user_id = 1;
+}
+
+message LeaveGameNtf {
     int32 user_id = 1;
 }

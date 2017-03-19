@@ -1,5 +1,8 @@
-package gamelogic
+package core
 
+import (
+	. "github.com/lkj01010/act-srv/game/com"
+)
 //type UserIpc interface {
 //	Send(userId int32, msg []byte)
 //}
@@ -17,29 +20,25 @@ package gamelogic
 // 			•------> sceneMgr
 // ────────────────────────────────────────────────────────────────────────────────
 
-type Sender interface {
-	Send_player_enter_game(player *Player)
-}
 
 //////////////////////////////////////////////////
 
 type Player struct {
 	//sceneId int32
 	// 对scene的操作chan
-	Sender
-	scene *Scene
+	ss *Session
 }
 
-func NewPlayer(sender Sender) *Player {
+func NewPlayer(ss *Session) *Player {
 	return &Player{
-		Sender: sender,
+		ss: ss,
 	}
 }
 
-func (player *Player) EnterScene(roomType int32, figure int32, userId int32) {
-	sceneMgr.Perform(SMH_playerEnter(player))
-}
-
-func (player *Player) LeaveScene() {
-	sceneMgr.Perform(SMH_playerLeave(player))
-}
+//func (p *Player) EnterScene(roomType int32, figure int32, userId int32) {
+//	GameMgr.msgSsCh <- GMH_playerEnter(p.ss, roomType, figure, userId)
+//}
+//
+//func (p *Player) LeaveScene() {
+//	GameMgr.msgSsCh <- GMH_playerLeave(p)
+//}
