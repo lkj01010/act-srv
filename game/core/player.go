@@ -1,7 +1,6 @@
 package core
 
 import (
-	. "github.com/lkj01010/act-srv/game/com"
 )
 //type UserIpc interface {
 //	Send(userId int32, msg []byte)

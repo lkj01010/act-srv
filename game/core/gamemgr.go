@@ -2,8 +2,6 @@ package core
 
 import (
 	"github.com/lkj01010/goutils/log"
-
-	. "github.com/lkj01010/act-srv/game/com"
 	"sort"
 )
 
@@ -47,7 +45,6 @@ func (v *vacantGameList) End() *game {
 
 //////////////////////////////////////////////////
 type gameManager struct {
-	msgSsCh chan *MsgWithSession
 	fnCh    chan HandleFunc
 	// 全部scene
 	gameMap map[int32]*game
@@ -78,66 +75,12 @@ func (gm *gameManager) serve() {
 	}()
 	for {
 		select {
-		//case handler := <-gm.in:
-		//	log.Infof("%+v", handler)
-		//	handler(gm)
-
-		//case msgWithSession := <-gm.msgSsCh:
-		//	if h, ok := gm.handlers[msgWithSession.Cmd]; !ok {
-		//		log.Error("not found cmd=%+v", msgWithSession.Cmd)
-		//	} else {
-		//		h(msgWithSession.Ss, msgWithSession.Payload)
-		//	}
 		case fn := <-gm.fnCh:
 			h := fn.(func(gm *gameManager))
 			h(gm)
 		}
 	}
 }
-
-//////////////////////////////////////////////////
-// gameManagerHandler
-
-//func GMH_playerEnter(ss *Session, roomType int32, figure int32, userId int32) gameManagerHandler {
-//	return func(gm *gameManager) {
-//		var g *game
-//		if gm.gameListNotFull.Len() == 0 {
-//			id := (int32)(len(gm.gameMap))
-//			g = newGame(id)
-//
-//			gm.gameMap[id] = g
-//			gm.gameListNotFull.PushBack(g)
-//		}
-//
-//		sceneElem := gm.gameListNotFull.Front()
-//		g = sceneElem.Value.(*game)
-//
-//		g.msgCh <- GH_sessionEnter(ss, roomType, figure, userId)
-//	}
-//}
-//
-//func GMH_gameFull(roomType int32, figure int32, userId int32) gameManagerHandler {
-//	return func(gm *gameManager) {
-//		log.Warningf("sceneFull try another time, current scene len=%v+, current not full len=%v+",
-//			len(gm.gameMap), gm.gameListNotFull.Len())
-//		GMH_playerEnter(roomType, figure, userId)(gm)
-//	}
-//}
-//
-
-//
-//func SMH_killPlayerFromScene(player *Player) gameManagerHandler {
-//	return func(gm *gameManager) {
-//
-//	}
-//}
-
-//
-//func (gm *sceneManager) newScene() (sceneId int32, sceneIn chan SceneHandler) {
-//	id := (int32)(len(gm.gameMap))
-//	scene := newScene(id)
-//	gm.gameMap[id] = scene
-//}
 
 func (gm *gameManager) PlayerEnter(roomType int32, figure int32, userId int32) int32 {
 	return 0

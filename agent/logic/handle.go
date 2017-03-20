@@ -32,7 +32,7 @@ func H_heartbeat_req(sess *Session) ([]byte, error) {
 		log.Errorf("marshal HeartbeatAck err=%+v", err)
 		return nil, nil
 	}
-	return packet.Pack(Cmd[Agent_HeartbeatAck], ret, nil), nil
+	return packet.Pack(int16(Agent_HeartbeatAck), ret, nil), nil
 	//return []byte("123")
 }
 
@@ -122,7 +122,7 @@ func H_login_req(ss *Session) ([]byte, error) {
 		log.Error(err)
 		return nil, nil
 	} else {
-		return packet.Pack(Cmd[Agent_LoginAck], ret, nil), nil
+		return packet.Pack(int16(Agent_LoginAck), ret, nil), nil
 	}
 
 	//return packet.Pack(Cmd["login_ack"], S_user_snapshot{F_uid: ss.UserId}, nil)

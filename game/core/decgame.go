@@ -5,17 +5,16 @@ import (
 	"github.com/lkj01010/goutils/log"
 
 	"github.com/lkj01010/act-srv/game/core/gamepb"
-	. "github.com/lkj01010/act-srv/game/com"
 	. "github.com/lkj01010/act-srv/com"
 )
 
-var gameDecoders map[int16]func(ss *Session, payload []byte) HandleFunc
+var gameDecoders map[Cmd]func(ss *Session, payload []byte) HandleFunc
 
 func init() {
-	gameDecoders = make(map[int16]func(ss *Session, payload []byte) HandleFunc)
+	gameDecoders = make(map[Cmd]func(ss *Session, payload []byte) HandleFunc)
 
-	gameDecoders[Cmd[Game_EnterGameReq]] = dec_g_enterGame
-	gameDecoders[Cmd[Game_LeaveGameReq]] = dec_g_leaveGame
+	gameDecoders[Game_EnterGameReq] = dec_g_enterGame
+	gameDecoders[Game_LeaveGameReq] = dec_g_leaveGame
 }
 
 func dec_g_enterGame(ss *Session, payload []byte) HandleFunc {

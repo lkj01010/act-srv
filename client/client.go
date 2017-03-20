@@ -162,15 +162,15 @@ func (ss *session) serve() {
 	}
 }
 
-func (ss *session) Send(cmd int16, payload []byte) error {
+func (ss *session) Send(cmd Cmd, payload []byte) error {
 	ss.seqId++
 	s_agent := &agentLogic.S_agent{
 		F_seqId:   ss.seqId,
-		F_proto:   cmd,
+		F_proto:   int16(cmd),
 		F_payload: payload,
 	}
 	dataByte := s_agent.Pack()
-	log.Debugf("[send][cmd=%+v][payload=%+v]", RCmd[cmd], payload)
+	log.Debugf("[send][cmd=%+v][payload=%+v]", cmd.String(), payload)
 	if _, err := ss.w.Write(dataByte); err != nil {
 		log.Error("session send dail error=", err)
 		return err
@@ -178,7 +178,7 @@ func (ss *session) Send(cmd int16, payload []byte) error {
 	return nil
 }
 
-func (ss *session) proxy_msg(msg []byte) (int16, []byte) {
+func (ss *session) proxy_msg(msg []byte) (Cmd, []byte) {
 	//log.Debugf("proxy_msg : %+v", msg)
 
 	reader := packet.Reader(msg)
@@ -192,9 +192,9 @@ func (ss *session) proxy_msg(msg []byte) (int16, []byte) {
 	if payload, err = reader.ReadBytes(); err != nil {
 		panic(err)
 	}
-	log.Debugf("[receive][cmd=%+v][payload=%+v]", RCmd[cmd], payload)
+	log.Debugf("[receive][cmd=%+v][payload=%+v]", Cmd(cmd).String(), payload)
 
-	if ret, err = handlers[cmd](ss, payload); err != nil {
+	if ret, err = handlers[Cmd(cmd)](ss, payload); err != nil {
 		panic(err)
 	}
 
@@ -214,7 +214,7 @@ func (ss *session) update() {
 
 //////////////////////////////////////////////////
 type cmdData struct {
-	cmd     int16
+	cmd     Cmd
 	payload []byte
 }
 
@@ -225,11 +225,11 @@ type msgPool struct {
 
 func (p *msgPool) init() {
 	p.cmdList = append(p.cmdList, cmdData{
-		cmd:     Cmd[Agent_LoginReq],
+		cmd:     Agent_LoginReq,
 		payload: nil,
 	})
 	p.cmdList = append(p.cmdList, cmdData{
-		cmd:     Cmd[Agent_HeartbeatReq],
+		cmd:     Agent_HeartbeatReq,
 		payload: nil,
 	})
 	//p.cmdList = append(p.cmdList, cmdData{
@@ -244,7 +244,7 @@ func (p *msgPool) init() {
 	//writer := packet.Writer()
 	//writer.WriteBytes(payload)
 	p.cmdList = append(p.cmdList, cmdData{
-		cmd: Cmd[Game_EnterGameReq],
+		cmd: Game_EnterGameReq,
 		//payload: writer.Data(),
 		payload: payload,
 	})

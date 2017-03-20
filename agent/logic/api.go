@@ -5,13 +5,13 @@ import (
 	. "github.com/lkj01010/act-srv/com"
 )
 
-var Handlers map[int16]func(*Session) ([]byte, error)
+var Handlers map[Cmd]func(*Session) ([]byte, error)
 var UserId int32
 
 func init() {
-	Handlers = map[int16]func(*Session) ([]byte, error) {
-		Cmd[Agent_HeartbeatReq]: H_heartbeat_req,
-		Cmd[Agent_LoginReq]: H_login_req,
+	Handlers = map[Cmd]func(*Session) ([]byte, error) {
+		Agent_HeartbeatReq: H_heartbeat_req,
+		Agent_LoginReq: H_login_req,
 	}
 	UserId = 0
 }

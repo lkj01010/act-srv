@@ -4,14 +4,14 @@ import (
 	. "github.com/lkj01010/act-srv/com"
 )
 
-var handlers map[int16]func(*session, []byte) ([]byte, error)
+var handlers map[Cmd]func(*session, []byte) ([]byte, error)
 
 func init() {
 
-	handlers = map[int16]func(*session, []byte) ([]byte, error){
-		Cmd[Agent_HeartbeatAck]:  H_heartbeat_ack,
-		Cmd[Agent_LoginAck]: H_login_ack,
+	handlers = map[Cmd]func(*session, []byte) ([]byte, error){
+		Agent_HeartbeatAck: H_heartbeat_ack,
+		Agent_LoginAck:     H_login_ack,
 
-		Cmd[Game_EnterGameNtf]: H_enter_game_ntf,
+		Game_EnterGameNtf: H_enter_game_ntf,
 	}
 }

@@ -13,7 +13,7 @@ func enc_g_enterGameNtf(userId int32) []byte {
 		UserId:  userId,
 	})
 	log.Debugf("[ntf enterGameNtf][userId=%+v]", userId)
-	return packet.Pack(Cmd[Game_EnterGameNtf], buf, nil)
+	return packet.Pack(int16(Game_EnterGameNtf), buf, nil)
 }
 
 func enc_g_leaveGameNtf(userId int32) []byte {
@@ -21,5 +21,5 @@ func enc_g_leaveGameNtf(userId int32) []byte {
 		UserId:  userId,
 	})
 	log.Debugf("[ntf leaveGameNtf][userId=%+v]", userId)
-	return packet.Pack(Cmd[Game_LeaveGameNtf], buf, nil)
+	return packet.Pack(int16(Game_LeaveGameNtf), buf, nil)
 }

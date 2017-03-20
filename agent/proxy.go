@@ -81,7 +81,7 @@ func proxy_user_request(sess *Session, p []byte) []byte {
 	// 根据协议号断做服务划分
 	// 协议号的划分采用分割协议区间, 用户可以自定义多个区间，用于转发到不同的后端服务
 	var ret []byte
-	if cmd > Cmd[Game_Start] {
+	if cmd > int16(com.Game_Start) {
 		log.Debugf("[forward send=%+v]", p[4:])
 		if err := forward(sess, p[4:]); err != nil {
 			log.Errorf("service id:%v execute failed, error:%v", cmd, err)
@@ -89,8 +89,8 @@ func proxy_user_request(sess *Session, p []byte) []byte {
 			return nil
 		}
 	} else {
-		log.Debugf("[agent handle][cmd=%+v]", com.RCmd[cmd])
-		if h := logic.Handlers[cmd]; h != nil {
+		log.Debugf("[agent handle][cmd=%+v]", Cmd(cmd).String())
+		if h := logic.Handlers[Cmd(cmd)]; h != nil {
 			if ret, err = h(sess); err != nil {
 				log.Errorf("handle logic err=%+v", err)
 				sess.Flag |= SESS_KICKED_OUT
@@ -110,7 +110,7 @@ func proxy_user_request(sess *Session, p []byte) []byte {
 	elasped := time.Now().Sub(start)
 	if cmd != 0 { // 排除心跳包日志
 		//log.Debug("[REQ]", logic.RCmd[cmd])
-		_statter.Timing(1.0, fmt.Sprintf("%v%v", STATSD_PREFIX, com.RCmd[cmd]), elasped)
+		_statter.Timing(1.0, fmt.Sprintf("%v%v", STATSD_PREFIX, Cmd(cmd).String()), elasped)
 	}
 	return ret
 }

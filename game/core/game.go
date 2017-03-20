@@ -2,8 +2,6 @@ package core
 
 import (
 	"github.com/lkj01010/goutils/log"
-
-	. "github.com/lkj01010/act-srv/game/com"
 )
 
 const (
