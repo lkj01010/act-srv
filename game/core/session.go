@@ -12,6 +12,7 @@ import (
 	"github.com/lkj01010/act-srv/game/registry"
 	"github.com/lkj01010/act-srv/misc/packet"
 	. "github.com/lkj01010/act-srv/com"
+	"sync/atomic"
 )
 
 var (
@@ -24,9 +25,12 @@ const (
 
 )
 
-const (
-	SessKickedOut = 1 << iota
-)
+//type ssFlagType int32
+//const (
+//	ssKickedOut ssFlagType = iota
+//	ssInGame
+//	ssFlagLen
+//)
 //
 //type Msg struct {
 //	Cmd     int16
@@ -46,9 +50,19 @@ type Session struct {
 	ToAgentCh chan []byte
 	Die chan struct{}
 
-	Flag   int32 // 会话标记
+	isDie int32
+	isInGame int32
+
 	UserId int32
 }
+
+//func (ss *Session)StoreFlag(bit ssFlagType, value int32) {
+//	atomic.StoreInt32(&ss.Flags[bit], value)
+//}
+//
+//func (ss *Session)LoadFlag(bit ssFlagType, value int32) {
+//	atomic.LoadInt32(&ss.Flags[bit])
+//}
 
 func NewSession() *Session {
 	return &Session{
@@ -76,7 +90,6 @@ func (ss *Session) recv(stream GameService_StreamServer, ssDie chan struct{}) <-
 				// client closed
 				return
 			}
-
 			//log.Infof("Recv in=%+v, err=%+v", in, err)
 			if err != nil {
 				log.Error(err)
@@ -103,6 +116,7 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 
 	defer func() {
 		Ipc.Unregister(ss.UserId)
+		close(ss.ToAgentCh)
 		close(ssDie)
 		log.Debugf("[stream end][userid=%+v]", ss.UserId)
 	}()
@@ -135,40 +149,41 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 		select {
 		case frame, ok := <-streamCh:
 			// frames from agent
-			if !ok {
+			if ok {
+				switch frame.Type {
+				case Game_Message:
+					// locate handler by proto number
+					reader := packet.Reader(frame.Message)
+					c, err := reader.ReadS16()
+					if err != nil {
+						log.Error(err)
+						return err
+					}
+
+					payload, err := reader.ReadBytes()
+					if err != nil {
+						log.Error(err)
+						return err
+					}
+
+					log.Debugf("[dispatch][cmd=%v][payload=%+v]", c, payload)
+					ss.dispatch(Cmd(c), payload)
+
+				case Game_Ping:
+					if err := stream.Send(&Game_Frame{Type: Game_Ping, Message: frame.Message}); err != nil {
+						log.Error(err)
+						return err
+					}
+					log.Debug("pinged")
+				default:
+					log.Errorf("[incorrect frame type=%+v]", frame.Type)
+					return errIncorrectFrameType
+				}
+			} else {
 				// EOF
-				ss.Flag |= SessKickedOut
-				log.Debug("streamCh is closed")
-				return nil
-			}
-			switch frame.Type {
-			case Game_Message:
-				// locate handler by proto number
-				reader := packet.Reader(frame.Message)
-				c, err := reader.ReadS16()
-				if err != nil {
-					log.Error(err)
-					return err
-				}
-
-				payload, err := reader.ReadBytes()
-				if err != nil {
-					log.Error(err)
-					return err
-				}
-
-				log.Debugf("[dispatch][cmd=%v][payload=%+v]", c, payload)
-				ss.dispatch(Cmd(c), payload)
-
-			case Game_Ping:
-				if err := stream.Send(&Game_Frame{Type: Game_Ping, Message: frame.Message}); err != nil {
-					log.Error(err)
-					return err
-				}
-				log.Debug("pinged")
-			default:
-				log.Errorf("[incorrect frame type=%+v]", frame.Type)
-				return errIncorrectFrameType
+				atomic.StoreInt32(&ss.isDie, 1)
+				ss.dispatch(Game_LeaveGameReq, nil)
+				log.Debug("stream close, ss set die flag")
 			}
 
 		case msg := <-ss.ToAgentCh:
@@ -191,11 +206,10 @@ func (ss *Session)dispatch(cmd Cmd, payload []byte) {
 	if dest == DestGameMgr {
 		GameMgr.fnCh <- gameMgrDecoders[cmd](ss, payload)
 	} else if dest == DestGame {
-		if ss.ToGameCh == nil {
-			//ss.Die <- struct{}{}
-			log.Error("dispatch to game when ToGameCh==nil")
-		} else {
+		if atomic.LoadInt32(&ss.isInGame) == 1 {
 			ss.ToGameCh <- gameDecoders[cmd](ss, payload)
+		} else {
+			log.Error("dispatch to game when ToGameCh==nil")
 		}
 	} else {
 		log.Errorf("[cmd not found][cmd=%+v]", cmd)

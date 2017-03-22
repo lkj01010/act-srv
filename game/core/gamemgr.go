@@ -45,7 +45,7 @@ func (v *vacantGameList) End() *game {
 
 //////////////////////////////////////////////////
 type gameManager struct {
-	fnCh    chan HandleFunc
+	fnCh chan HandleFunc
 	// 全部scene
 	gameMap map[int32]*game
 	// 下一个scene编号
@@ -99,6 +99,10 @@ func (gm *gameManager) h_enterGame(ss *Session, roomType int32, figure int32) {
 	g = gm.vgList.End()
 	log.Infof("[get a game][id=%+v][player count=%+v][total game count=%+v]", g.id, len(g.playerMap), len(gm.gameMap))
 
+	if g.playerCount == MAX_PLAYER-1 {
+		g.playerCount++
+		gm.vgList.Remove(g)
+	}
 	g.fnCh <- func(g *game) {
 		g.h_enterGame(ss, roomType, figure)
 	}

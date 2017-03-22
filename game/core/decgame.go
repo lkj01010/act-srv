@@ -6,6 +6,7 @@ import (
 
 	"github.com/lkj01010/act-srv/game/core/gamepb"
 	. "github.com/lkj01010/act-srv/com"
+	"sync/atomic"
 )
 
 var gameDecoders map[Cmd]func(ss *Session, payload []byte) HandleFunc
@@ -22,7 +23,8 @@ func dec_g_enterGame(ss *Session, payload []byte) HandleFunc {
 		msg := new(gamepb.EnterGameReq)
 		if err := proto.Unmarshal(payload, msg); err != nil {
 			log.Errorf("unmarshal H_enter_game_req err=%+v", err)
-			close(ss.Die)
+			atomic.StoreInt32(&ss.isDie, 1)
+			g.h_leaveGame(ss)
 		}
 		roomType := msg.GetRoomType()
 		figure := msg.GetFigure()
