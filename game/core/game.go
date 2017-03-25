@@ -68,7 +68,7 @@ func (g *game) h_enterGame(ss *Session, roomType int32, figure int32) {
 	} else {
 		if _, ok := g.playerMap[ss.GetUserId()]; ok {
 			log.Errorf("[gf_enterGame user exist][id=%+v]", ss.GetUserId())
-			close(ss.Die)
+			close(ss.DieCh)
 			return
 		}
 
@@ -91,7 +91,7 @@ func (g *game) h_leaveGame(ss *Session) {
 	for _, p := range g.playerMap {
 		if p.ss == ss {
 			if atomic.LoadInt32(&p.ss.isDie) == 1 {
-				close(p.ss.Die)
+				close(p.ss.DieCh)
 			} else {
 				p.ss.ToAgentCh <- enc_g_leaveGameNtf(ss.GetUserId())
 			}

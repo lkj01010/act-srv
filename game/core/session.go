@@ -46,9 +46,9 @@ type HandleFunc interface {
 }
 
 type Session struct {
-	ToGameCh chan HandleFunc
+	ToGameCh  chan HandleFunc
 	ToAgentCh chan []byte
-	Die chan struct{}
+	DieCh     chan struct{}
 
 	isDie int32
 	isInGame int32
@@ -67,7 +67,7 @@ type Session struct {
 func NewSession() *Session {
 	return &Session{
 		ToAgentCh: make(chan []byte, DEFAULT_CH_IPC_SIZE),
-		Die: make(chan struct{}),
+		DieCh:     make(chan struct{}),
 	}
 }
 
@@ -166,7 +166,7 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 						return err
 					}
 
-					log.Debugf("[dispatch][cmd=%v][payload=%+v]", c, payload)
+					log.Debugf("[dispatch][cmd=%+v][payload=%+v]", Cmd(c).String(), payload)
 					ss.dispatch(Cmd(c), payload)
 
 				case Game_Ping:
@@ -181,9 +181,7 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 				}
 			} else {
 				// EOF
-				atomic.StoreInt32(&ss.isDie, 1)
-				ss.dispatch(Game_LeaveGameReq, nil)
-				log.Debug("stream close, ss set die flag")
+				ss.Die()
 			}
 
 		case msg := <-ss.ToAgentCh:
@@ -191,13 +189,30 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 				log.Error(err)
 				return err
 			}
-		case <-ss.Die:
+		case <-ss.DieCh:
 			if err := stream.Send(&Game_Frame{Type: Game_Kick}); err != nil {
 				log.Error(err)
 				return err
 			}
 			return nil
 		}
+	}
+}
+
+func (ss *Session) Die() {
+	if atomic.CompareAndSwapInt32(&ss.isDie, 0,1) {
+		if atomic.LoadInt32(&ss.isInGame) == 1 {
+			ss.dispatch(Game_LeaveGameReq, nil)
+		} else {
+			close(ss.DieCh)
+		}
+		log.Debug("ss Die")
+	}
+}
+
+func (ss *Session) TryToLeaveGame(cb interface{}) {
+	if atomic.CompareAndSwapInt32(&ss.isInGame, 1, 0) {
+		//ss.ToGameCh <-
 	}
 }
 

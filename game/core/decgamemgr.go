@@ -23,7 +23,7 @@ func dec_gm_enterGame(ss *Session, payload []byte) HandleFunc {
 		msg := new(gamepb.EnterGameReq)
 		if err := proto.Unmarshal(payload, msg); err != nil {
 			log.Errorf("unmarshal dec_gm_enterGame err=%+v", err)
-			close(ss.Die)
+			ss.Die()
 			// note: 如果这时 isInGame==1, 那么给game发送leaveFunc
 		}
 		roomType := msg.GetRoomType()
