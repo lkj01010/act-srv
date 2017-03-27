@@ -59,7 +59,7 @@ var GameMgr gameManager
 
 func init() {
 	GameMgr = gameManager{
-		fnCh:    make(chan HandleFunc, 10),
+		fnCh:    make(chan HandleFunc, GAMEMGR_FN_CH_SIZE),
 		gameMap: make(map[int32]*game),
 		gameAcc: 0,
 		//gameListNotFull: list.New(),
@@ -104,7 +104,7 @@ func (gm *gameManager) h_enterGame(ss *Session, roomType int32, figure int32) {
 		gm.vgList.Remove(g)
 	}
 	g.fnCh <- func(g *game) {
-		g.h_enterGame(ss, roomType, figure)
+		g.H_enterGame(ss, roomType, figure)
 	}
 }
 

@@ -12,17 +12,11 @@ import (
 	"github.com/lkj01010/act-srv/game/registry"
 	"github.com/lkj01010/act-srv/misc/packet"
 	. "github.com/lkj01010/act-srv/com"
-	"sync/atomic"
 )
 
 var (
 	errIncorrectFrameType  = errors.New("incorrect frame type")
 	ERROR_SERVICE_NOT_BIND = errors.New("service not bind")
-)
-
-const (
-	DEFAULT_CH_IPC_SIZE = 16
-
 )
 
 //type ssFlagType int32
@@ -42,16 +36,17 @@ const (
 //	Msg
 //}
 
-type HandleFunc interface {
-}
+type HandleFunc interface{}
 
 type Session struct {
 	ToGameCh  chan HandleFunc
-	ToAgentCh chan []byte
 	DieCh     chan struct{}
 
-	isDie int32
+	isDie    int32
 	isInGame int32
+
+	fnCh   chan interface{}
+	stream GameService_StreamServer
 
 	UserId int32
 }
@@ -66,19 +61,18 @@ type Session struct {
 
 func NewSession() *Session {
 	return &Session{
-		ToAgentCh: make(chan []byte, DEFAULT_CH_IPC_SIZE),
 		DieCh:     make(chan struct{}),
+		fnCh:      make(chan interface{}, SESSION_FN_CH_SIZE),
 	}
 }
 
-func (ss *Session)GetUserId() int32 {
+func (ss *Session) GetUserId() int32 {
 	return ss.UserId
 }
 
-
 // PIPELINE #1 stream receiver
 // this function is to make the stream receiving SELECTABLE
-func (ss *Session) recv(stream GameService_StreamServer, ssDie chan struct{}) <-chan *Game_Frame {
+func (ss *Session) recv(stream GameService_StreamServer, ssDie <-chan struct{}) <-chan *Game_Frame {
 	ch := make(chan *Game_Frame, 1)
 	go func() {
 		defer func() {
@@ -116,7 +110,6 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 
 	defer func() {
 		Ipc.Unregister(ss.UserId)
-		close(ss.ToAgentCh)
 		close(ssDie)
 		log.Debugf("[stream end][userid=%+v]", ss.UserId)
 	}()
@@ -141,8 +134,9 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 
 	// register user
 	ss.UserId = int32(userId)
-	Ipc.Register(ss.UserId, ss.ToAgentCh)
+	Ipc.Register(ss.UserId, ss.fnCh)
 	log.Debugf("[stream open][userId=%+v]", ss.UserId)
+	ss.stream = stream
 
 	// >> main message loop <<
 	for {
@@ -166,7 +160,8 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 						return err
 					}
 
-					log.Debugf("[dispatch][cmd=%+v][payload=%+v]", Cmd(c).String(), payload)
+					log.Debugf("[dispatch][cmd=%+v][payload=%+v][userId=%+v]", Cmd(c).String(), payload,
+						ss.UserId)
 					ss.dispatch(Cmd(c), payload)
 
 				case Game_Ping:
@@ -181,14 +176,18 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 				}
 			} else {
 				// EOF
-				ss.Die()
+				ss.Close()
 			}
 
-		case msg := <-ss.ToAgentCh:
-			if err := stream.Send(&Game_Frame{Type: Game_Message, Message: msg}); err != nil {
-				log.Error(err)
-				return err
-			}
+		case fn := <-ss.fnCh:
+			h := fn.(func(g *Session))
+			h(ss)
+
+		//case msg := <-ss.ToAgentCh:
+		//	if err := stream.Send(&Game_Frame{Type: Game_Message, Message: msg}); err != nil {
+		//		log.Error(err)
+		//		return err
+		//	}
 		case <-ss.DieCh:
 			if err := stream.Send(&Game_Frame{Type: Game_Kick}); err != nil {
 				log.Error(err)
@@ -199,29 +198,59 @@ func (ss *Session) Stream(stream GameService_StreamServer) error {
 	}
 }
 
-func (ss *Session) Die() {
-	if atomic.CompareAndSwapInt32(&ss.isDie, 0,1) {
-		if atomic.LoadInt32(&ss.isInGame) == 1 {
-			ss.dispatch(Game_LeaveGameReq, nil)
-		} else {
-			close(ss.DieCh)
+func (ss *Session) H_enterGame(gameCh chan HandleFunc) {
+	if ss.ToGameCh != nil {
+		log.Panic("never reach")
+	}
+	ss.ToGameCh = gameCh
+	// 逻辑上对agent的ack交给game
+	log.Debugf("[game <- H_sessionEnterAck][userId=%+v]", ss.UserId)
+	ss.ToGameCh <- func(g *game) {
+		g.H_sessionEnterAck(ss)
+	}
+}
+
+func (ss *Session) Close() {
+	if ss.ToGameCh != nil {
+		log.Debugf("[game <- H_sessionLeave][userId=%+v]", ss.UserId)
+		ss.ToGameCh <- func(g *game) {
+			g.H_sessionLeave(ss)
 		}
-		log.Debug("ss Die")
+		ss.ToGameCh = nil
+	} else {
+		ss.Die()
 	}
 }
 
-func (ss *Session) TryToLeaveGame(cb interface{}) {
-	if atomic.CompareAndSwapInt32(&ss.isInGame, 1, 0) {
-		//ss.ToGameCh <-
+func (ss *Session) H_close() {
+	//log.Debugf("[session H_close()][userId=%+v][ToGameCh=%+v]", ss.UserId, ss.ToGameCh)
+	if ss.ToGameCh != nil {
+		log.Debugf("[game <- H_sessionCloseAck][userId=%+v]", ss.UserId)
+		ss.ToGameCh <- func(g *game) {
+			g.H_sessionCloseAck(ss)
+		}
+		ss.ToGameCh = nil
+		//log.Debugf("[session H_close() done][userId=%+v][ToGameCh=%+v]", ss.UserId, ss.ToGameCh)
+	} else {
+		ss.Die()
 	}
 }
 
-func (ss *Session)dispatch(cmd Cmd, payload []byte) {
+func (ss *Session) Die() {
+	//log.Debugf("[session Die()][userId=%+v", ss.UserId)
+	close(ss.DieCh)
+}
+
+func (ss *Session) H_streamSend(msg []byte) {
+	ss.stream.Send(&Game_Frame{Type: Game_Message, Message: msg})
+}
+
+func (ss *Session) dispatch(cmd Cmd, payload []byte) {
 	dest := CmdSendTo(cmd)
 	if dest == DestGameMgr {
 		GameMgr.fnCh <- gameMgrDecoders[cmd](ss, payload)
 	} else if dest == DestGame {
-		if atomic.LoadInt32(&ss.isInGame) == 1 {
+		if ss.ToGameCh != nil {
 			ss.ToGameCh <- gameDecoders[cmd](ss, payload)
 		} else {
 			log.Error("dispatch to game when ToGameCh==nil")
@@ -230,7 +259,6 @@ func (ss *Session)dispatch(cmd Cmd, payload []byte) {
 		log.Errorf("[cmd not found][cmd=%+v]", cmd)
 	}
 }
-
 
 //////////////////////////////////////////////////
 

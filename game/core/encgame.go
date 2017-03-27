@@ -16,6 +16,15 @@ func enc_g_enterGameNtf(userId int32) []byte {
 	return packet.Pack(int16(Game_EnterGameNtf), buf, nil)
 }
 
+func enc_g_enterGameAck(userId int32, gameId int32) []byte {
+	buf, _ :=proto.Marshal(&gamepb.EnterGameAck{
+		UserId: userId,
+		GameId: gameId,
+	})
+	log.Debugf("[enterGameAck][userId=%+v][gameId=%+v]", userId, gameId)
+	return packet.Pack(int16(Game_EnterGameAck), buf, nil)
+}
+
 func enc_g_leaveGameNtf(userId int32) []byte {
 	buf, _ :=  proto.Marshal(&gamepb.LeaveGameNtf{
 		UserId:  userId,

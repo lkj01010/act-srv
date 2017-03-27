@@ -53,9 +53,11 @@ message EnterGameReq {
 }
 
 message EnterGameAck {
-    Scene scene_info = 1;
-    Player user = 2;
-    repeated Player other_player_list = 3;
+//    Scene scene_info = 1;
+//    Player user = 2;
+//    repeated Player other_player_list = 3;
+    int32 user_id = 1;
+    int32 game_id = 2;
 }
 
 message EnterGameNtf {

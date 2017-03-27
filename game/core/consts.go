@@ -1,0 +1,9 @@
+package core
+
+const (
+	DEFAULT_CH_SIZE = 16
+
+	SESSION_FN_CH_SIZE = 10
+	GAME_FN_CH_SIZE = 10
+	GAMEMGR_FN_CH_SIZE = 10
+)
